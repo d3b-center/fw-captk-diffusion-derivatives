@@ -1,0 +1,137 @@
+#!/bin/bash
+#
+#	template based on:  https://github.com/scitran-apps/fsl-bet/blob/master/run
+#
+
+CONTAINER="[captk-diffusion-derivatives]"
+echo -e "$CONTAINER  Initiated"
+
+###############################################################################
+## Built to flywheel-v0 spec.
+FLYWHEEL_BASE=/flywheel/v0
+OUTPUT_DIR=$FLYWHEEL_BASE/output
+dwi_DIR=$FLYWHEEL_BASE/input/DWI
+mask_DIR=$FLYWHEEL_BASE/input/Mask
+bval_DIR=$FLYWHEEL_BASE/input/Bval
+bvec_DIR=$FLYWHEEL_BASE/input/Bvec
+reg_DIR=$FLYWHEEL_BASE/input/Reg-fixed
+MANIFEST=$FLYWHEEL_BASE/manifest.json
+CONFIG_FILE=$FLYWHEEL_BASE/config.json
+
+###############################################################################
+## Configure the ENV
+export USER=Flywheel
+
+###############################################################################
+## Execute the main processes
+
+## get all user configurations
+if [[ -f $CONFIG_FILE ]]; then
+  echo "$CONTAINER  $CONFIG_FILE found. Loading config..."
+
+  if [[ $(jq -r <$CONFIG_FILE '''.config.axial_diffusivity') == 'true' ]]; then
+    axial_diffusivity=1
+  elif [[ $(jq -r <$CONFIG_FILE '''.config.axial_diffusivity') == 'false' ]]; then
+    axial_diffusivity=0
+  else
+    axial_diffusivity=1
+  fi
+
+  if [[ $(jq -r <$CONFIG_FILE '''.config.fractional_anisotropy') == 'true' ]]; then
+    fractional_anisotropy=1
+  elif [[ $(jq -r <$CONFIG_FILE '''.config.fractional_anisotropy') == 'false' ]]; then
+    fractional_anisotropy=0
+  else
+    fractional_anisotropy=1
+  fi
+
+  if [[ $(jq -r <$CONFIG_FILE '''.config.radial_diffusivity') == 'true' ]]; then
+    radial_diffusivity=1
+  elif [[ $(jq -r <$CONFIG_FILE '''.config.radial_diffusivity') == 'false' ]]; then
+    radial_diffusivity=0
+  else
+    radial_diffusivity=1
+  fi
+
+  if [[ $(jq -r <$CONFIG_FILE '''.config.apparent_diffusion_coefficient') == 'true' ]]; then
+    apparent_diffusion_coefficient=1
+  elif [[ $(jq -r <$CONFIG_FILE '''.config.apparent_diffusion_coefficient') == 'false' ]]; then
+    apparent_diffusion_coefficient=0
+  else
+    apparent_diffusion_coefficient=1
+  fi
+
+else
+  echo "$CONTAINER  $CONFIG_FILE not found. Loading defaults from $MANIFEST..."
+  axial_diffusivity=1
+  fractional_anisotropy=1
+  radial_diffusivity=1
+  apparent_diffusion_coefficient=1
+
+fi
+
+## Find the input files
+echo "$CONTAINER  Loading input files..."
+# required input
+dwi_file=$(find $dwi_DIR/* -maxdepth 0 -type f -name "*.nii*")
+mask_file=$(find $mask_DIR/* -maxdepth 0 -type f -name "*.nii*")
+bval_file=$(find $bval_DIR/* -maxdepth 0 -type f -name "*.bval*")
+bvec_file=$(find $bvec_DIR/* -maxdepth 0 -type f -name "*.bvec*")
+
+# optional inputs
+if [[ -d $reg_DIR ]] ; then
+  reg_file=$(find $reg_DIR/* -maxdepth 0 -type f -name "*.nii*")
+  reg_flag=1
+else
+  reg_flag=0
+fi
+
+## update output file name if user-defined
+# out_path="output/"
+# out_path+=$output_fn
+# out_path="$(echo -e "${out_path}" | tr -d '[:space:]')"
+
+## If necessary input files are found, run the thing
+if [[ -f $dwi_file ]] & [[ -f $mask_file ]] & [[ -f $bval_file ]] & [[ -f $bvec_file ]] ; then
+
+  CaPTk_dir=/opt/captk/1.8.1/usr # path to install (in Docker container)
+
+  # make sure mask is uchar or short
+  ${CaPTk_dir}/bin/Utilities -i $mask_file -o short_$mask_file -c short
+
+  echo "$CONTAINER  Running CaPTk Feature Extraction"
+  if [[ reg_flag == 1 ]] ; then
+    ${CaPTk_dir}/bin/DiffusionDerivatives \
+      -i "${dwi_file}" \
+      -m "short_${mask_file}" \
+      -b "${bval_file}" \
+      -g "${bvec_file}" \
+      -a $axial_diffusivity -f $fractional_anisotropy -r $radial_diffusivity -t $apparent_diffusion_coefficient \
+      -reg "${reg_file}" \
+      -o output
+  else
+      ${CaPTk_dir}/bin/DiffusionDerivatives \
+      -i "${dwi_file}" \
+      -m "short_${mask_file}" \
+      -b "${bval_file}" \
+      -g "${bvec_file}" \
+      -a $axial_diffusivity -f $fractional_anisotropy -r $radial_diffusivity -t $apparent_diffusion_coefficient \
+      -o output
+  fi
+
+################# Finish up #################
+  STATUS=$?
+else
+  echo "$CONTAINER  Input files not found!"
+  exit 1
+fi
+
+# Check exit status
+if [[ $STATUS == 0 ]] ; then
+    echo -e "$CONTAINER  Done!"
+  else
+    echo "$CONTAINER  command returned a non-zero exit code = [$STATUS]."
+    exit 1
+fi
+
+exit 0
