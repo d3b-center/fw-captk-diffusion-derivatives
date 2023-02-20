@@ -86,11 +86,6 @@ else
   reg_flag=0
 fi
 
-## update output file name if user-defined
-# out_path="output/"
-# out_path+=$output_fn
-# out_path="$(echo -e "${out_path}" | tr -d '[:space:]')"
-
 ## If necessary input files are found, run the thing
 if [[ -f $dwi_file ]] & [[ -f $mask_file ]] & [[ -f $bval_file ]] & [[ -f $bvec_file ]] ; then
 
