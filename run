@@ -24,41 +24,42 @@ export USER=Flywheel
 
 ###############################################################################
 ## Execute the main processes
+function jsonValue() {
+KEY=$1
+num=$2
+awk -F"[,:}]" '{for(i=1;i<=NF;i++){if($i~/'$KEY'\042/){print $(i+1)}}}' | tr -d '"' | sed -n ${num}p
+}
 
 ## get all user configurations
 if [[ -f $CONFIG_FILE ]]; then
   echo "$CONTAINER  $CONFIG_FILE found. Loading config..."
 
-  if [[ $(jq -r <$CONFIG_FILE '''.config.axial_diffusivity') == 'true' ]]; then
+  ax_flag="$(cat $CONFIG_FILE | jsonValue axial_diffusivity)"
+  if [[ $ax_flag == 'true' ]]; then
     axial_diffusivity=1
-  elif [[ $(jq -r <$CONFIG_FILE '''.config.axial_diffusivity') == 'false' ]]; then
+  elif [[ $ax_flag == 'false' ]]; then
     axial_diffusivity=0
-  else
-    axial_diffusivity=1
   fi
 
-  if [[ $(jq -r <$CONFIG_FILE '''.config.fractional_anisotropy') == 'true' ]]; then
+  fa_flag="$(cat $CONFIG_FILE | jsonValue fractional_anisotropy)"
+  if [[ $fa_flag == 'true' ]]; then
     fractional_anisotropy=1
-  elif [[ $(jq -r <$CONFIG_FILE '''.config.fractional_anisotropy') == 'false' ]]; then
+  elif [[ $fa_flag == 'false' ]]; then
     fractional_anisotropy=0
-  else
-    fractional_anisotropy=1
   fi
 
-  if [[ $(jq -r <$CONFIG_FILE '''.config.radial_diffusivity') == 'true' ]]; then
+  rd_flag="$(cat $CONFIG_FILE | jsonValue radial_diffusivity)"
+  if [[ $rd_flag == 'true' ]]; then
     radial_diffusivity=1
-  elif [[ $(jq -r <$CONFIG_FILE '''.config.radial_diffusivity') == 'false' ]]; then
+  elif [[ $rd_flag == 'false' ]]; then
     radial_diffusivity=0
-  else
-    radial_diffusivity=1
   fi
 
-  if [[ $(jq -r <$CONFIG_FILE '''.config.apparent_diffusion_coefficient') == 'true' ]]; then
+  adc_flag="$(cat $CONFIG_FILE | jsonValue radial_diffusivity)"
+  if [[ $adc_flag == 'true' ]]; then
     apparent_diffusion_coefficient=1
-  elif [[ $(jq -r <$CONFIG_FILE '''.config.apparent_diffusion_coefficient') == 'false' ]]; then
+  elif [[ $adc_flag == 'false' ]]; then
     apparent_diffusion_coefficient=0
-  else
-    apparent_diffusion_coefficient=1
   fi
 
 else
@@ -92,13 +93,14 @@ if [[ -f $dwi_file ]] & [[ -f $mask_file ]] & [[ -f $bval_file ]] & [[ -f $bvec_
   CaPTk_dir=/opt/captk/1.8.1/usr # path to install (in Docker container)
 
   # make sure mask is uchar or short
-  ${CaPTk_dir}/bin/Utilities -i $mask_file -o short_$mask_file -c short
+  mask_fn=$(basename $mask_file)
+  ${CaPTk_dir}/bin/Utilities -i $mask_file -o short_$mask_fn -c short
 
-  echo "$CONTAINER  Running CaPTk Feature Extraction"
+  echo "$CONTAINER  Running CaPTk Diffusion Derivatives"
   if [[ reg_flag == 1 ]] ; then
     ${CaPTk_dir}/bin/DiffusionDerivatives \
       -i "${dwi_file}" \
-      -m "short_${mask_file}" \
+      -m "short_${mask_fn}" \
       -b "${bval_file}" \
       -g "${bvec_file}" \
       -a $axial_diffusivity -f $fractional_anisotropy -r $radial_diffusivity -t $apparent_diffusion_coefficient \
@@ -107,7 +109,7 @@ if [[ -f $dwi_file ]] & [[ -f $mask_file ]] & [[ -f $bval_file ]] & [[ -f $bvec_
   else
       ${CaPTk_dir}/bin/DiffusionDerivatives \
       -i "${dwi_file}" \
-      -m "short_${mask_file}" \
+      -m "short_${mask_fn}" \
       -b "${bval_file}" \
       -g "${bvec_file}" \
       -a $axial_diffusivity -f $fractional_anisotropy -r $radial_diffusivity -t $apparent_diffusion_coefficient \
